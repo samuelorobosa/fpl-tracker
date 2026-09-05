@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from .alternatives import flagged_player_ids, group_by_position, suggest_alternatives
+from .chips import chip_status
 from .diff_engine import diff_players
 from .fixture_difficulty import DEFAULT_HORIZON, build_team_outlook, format_run
 from .fpl_client import FPLClient, current_event_id
@@ -165,6 +166,7 @@ async def build_weekly_digest(team_id: int, horizon: int = DEFAULT_HORIZON) -> d
         gameweek = await client.get_entry_current_event(team_id)
         picks_data = await client.get_entry_picks(team_id, gameweek)
         fixtures = await client.get_fixtures()
+        history = await client.get_entry_history(team_id)
 
     current_players = _slim_players(bootstrap)
     # The pool is league-wide, so it is filed under the GLOBAL gameweek. Filing
@@ -232,6 +234,7 @@ async def build_weekly_digest(team_id: int, horizon: int = DEFAULT_HORIZON) -> d
         "entry_history": picks_data["entry_history"],
         "active_chip": picks_data["active_chip"],
         "alerts": alerts,
+        "chips": chip_status(bootstrap, history, gameweek, picks_data["active_chip"]),
         "squad": squad,
         "easiest_runs": _rank_runs(outlook, reverse=False)[:5],
         "hardest_runs": _rank_runs(outlook, reverse=True)[:5],

@@ -266,6 +266,17 @@
   }
   .note { color: var(--muted); font-size: 12px; padding: 4px 0 0; }
 
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 0 4px; }
+  .chip-pill {
+    display: flex; align-items: baseline; gap: 8px; padding: 8px 12px;
+    border: 1px solid var(--border); font-size: 12px; background: #fff;
+  }
+  .chip-pill b { font-size: 13px; }
+  .chip-pill.spent { background: var(--bg); color: var(--muted); }
+  .chip-pill.spent b { text-decoration: line-through; }
+  .chip-pill.live { border-color: var(--pl-pink); background: #fff0f6; }
+  .chip-pill .when { color: var(--muted); font-size: 11px; }
+
   .alert {
     padding: 11px 14px; margin: 9px 0; font-size: 13px;
     border-left: 4px solid var(--border); background: #fafafb;
@@ -333,6 +344,12 @@
       <h2><span id="alertsTitle">Alerts</span>
         <button type="button" class="copy" data-copy="alerts">Copy JSON</button></h2>
       <div class="body"><div id="alertsContent" class="empty">Load a digest to run this week's diff.</div></div>
+    </div>
+
+    <div class="card">
+      <h2><span id="chipsTitle">Chips</span>
+        <button type="button" class="copy" data-copy="chips">Copy JSON</button></h2>
+      <div class="body"><div id="chipsContent" class="empty">Load a digest to see chip usage.</div></div>
     </div>
 
     <div class="card">
@@ -440,7 +457,8 @@ function setStats(d) {
     ["In the Bank", money(h.bank), ""],
     ["Transfers", transfers, h.event_transfers_cost ? "pink" : ""],
     ["Bench Points", h.points_on_bench ?? "—", ""],
-    ["Chip", d.active_chip || "None", d.active_chip ? "cyan" : ""],
+    ["Chip Active", (d.chips.active_chip || "None"), d.chips.active_chip ? "cyan" : ""],
+    ["Chips Left", d.chips.available.length, d.chips.available.length ? "" : "pink"],
     ["Alerts", d.alerts.length, d.alerts.length ? "pink" : ""],
     ["Flagged", flagged, flagged ? "pink" : ""],
   ];
@@ -478,13 +496,14 @@ async function loadDigest() {
       compared_against_gameweek: d.compared_against_gameweek,
       alerts: d.alerts,
     };
-    latest.chips = { active_chip: d.active_chip };
+    latest.chips = d.chips;
     latest.fixtures = {
       horizon: d.horizon, easiest_runs: d.easiest_runs, hardest_runs: d.hardest_runs,
     };
     setStats(d);
     renderSquad(d);
     renderAlerts(d);
+    renderChips(d.chips);
     renderRuns(d.easiest_runs, d.hardest_runs, d.horizon);
   } catch (e) {
     $("stats").hidden = true;
@@ -580,6 +599,29 @@ function renderAlerts(d) {
   $("alertsContent").innerHTML = d.alerts.map((a) =>
     `<div class="alert ${esc(a.severity)}"><strong>${esc(a.web_name)}</strong> — ${esc(a.message)}</div>`).join("")
     + note;
+}
+
+function renderChips(chips) {
+  const window = chips.current_window;
+  $("chipsTitle").textContent = window
+    ? `Chips — gameweeks ${window.start_event}\u2013${window.stop_event}`
+    : "Chips";
+
+  const spent = chips.used.map((c) =>
+    `<div class="chip-pill spent"><b>${esc(c.label)}</b>
+      <span class="when">played GW${c.event}</span></div>`);
+  const open = chips.available.map((c) =>
+    `<div class="chip-pill ${chips.active_chip === c.name ? "live" : ""}"><b>${esc(c.label)}</b>
+      <span class="when">until GW${c.expires_after_event}</span></div>`);
+
+  if (!spent.length && !open.length) {
+    $("chipsContent").className = "empty";
+    $("chipsContent").textContent = "No chips available in this window.";
+    return;
+  }
+  $("chipsContent").className = "";
+  $("chipsContent").innerHTML = `<div class="chips">${open.join("")}${spent.join("")}</div>`
+    + (spent.length ? "" : '<div class="note">Nothing played yet this half of the season.</div>');
 }
 
 function runList(title, runs) {

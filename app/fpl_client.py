@@ -73,6 +73,12 @@ class FPLClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def get_entry_history(self, team_id: int) -> dict:
+        """A manager's season history, including the chips they have played."""
+        resp = await self._client.get(f"/entry/{team_id}/history/")
+        resp.raise_for_status()
+        return resp.json()
+
     async def get_current_event(self) -> int:
         """Convenience helper: figure out the global current/next gameweek id.
 
