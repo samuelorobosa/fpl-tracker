@@ -39,7 +39,19 @@ Then open http://127.0.0.1:8000/ui/ and enter an FPL team id.
   limitation, not a bug.
 - Alerts work by diffing this week's snapshot against last week's, so the first run for a
   given gameweek only saves a baseline and reports nothing.
-- Snapshots are flat JSON in `data/`, one file per gameweek, and are gitignored.
+- Snapshots are flat JSON under `data/`, gitignored, in two kinds:
+
+  ```
+  data/
+    players/gw3.json          # the whole league pool (~650 players), shared
+    teams/3732633/gw3.json    # one manager's 15 picks
+  ```
+
+  The player pool is keyed to the **global** gameweek, not the requesting
+  manager's current event — otherwise two managers sitting on different events
+  write the same day's data under two labels, and the diff between them is
+  empty. Alerts compare against the most recent *earlier* snapshot rather than
+  `gameweek - 1`, so skipping a week doesn't silently disable them.
 
 ## Tests
 

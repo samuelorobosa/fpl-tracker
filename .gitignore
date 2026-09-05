@@ -11,8 +11,11 @@ venv/
 .env
 .env.*
 
-# Weekly snapshots — regenerated on every run, and large (~170KB each).
+# Weekly snapshots — regenerated on every run. The league-wide player pool is
+# ~200KB per gameweek; per-team picks are small but still local state.
 # The directory itself is tracked via data/.gitkeep.
+data/players/
+data/teams/
 data/snapshot_gw*.json
 
 # macOS / editors

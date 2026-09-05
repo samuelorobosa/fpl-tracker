@@ -7,4 +7,6 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .DS_Store
+data/players/
+data/teams/
 data/snapshot_gw*.json

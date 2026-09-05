@@ -4,9 +4,13 @@ from __future__ import annotations
 from .alternatives import flagged_player_ids, group_by_position, suggest_alternatives
 from .diff_engine import diff_players
 from .fixture_difficulty import DEFAULT_HORIZON, build_team_outlook, format_run
-from .fpl_client import FPLClient
+from .fpl_client import FPLClient, current_event_id
 from .schemas import SquadAlert
-from .storage import load_snapshot, save_snapshot
+from .storage import (
+    load_previous_player_snapshot,
+    save_player_snapshot,
+    save_team_snapshot,
+)
 
 POSITION_MAP = {1: "GKP", 2: "DEF", 3: "MID", 4: "FWD"}
 
@@ -41,9 +45,9 @@ async def fetch_and_snapshot_current_week() -> tuple[int, list[dict]]:
     """Pull live data, save it as this week's snapshot, return (gameweek, players)."""
     async with FPLClient() as client:
         bootstrap = await client.get_bootstrap_static()
-        gameweek = await client.get_current_event()
+    gameweek = current_event_id(bootstrap)
     players = _slim_players(bootstrap)
-    save_snapshot(gameweek, players)
+    save_player_snapshot(gameweek, players)
     return gameweek, players
 
 
@@ -64,13 +68,14 @@ async def build_squad_alerts(team_id: int) -> tuple[int, list[SquadAlert]]:
     and filter changes down to just the players in this manager's squad.
     """
     squad_gameweek, squad_ids = await get_squad_player_ids(team_id)
-    _, current_players = await fetch_and_snapshot_current_week()
-    previous_players = load_snapshot(squad_gameweek - 1)
+    global_gameweek, current_players = await fetch_and_snapshot_current_week()
+    previous = load_previous_player_snapshot(before=global_gameweek)
 
-    if previous_players is None:
+    if previous is None:
         # First run — nothing to diff against yet. Not an error, just no history.
         return squad_gameweek, []
 
+    _, previous_players = previous
     return squad_gameweek, alerts_for_squad(previous_players, current_players, squad_ids)
 
 
@@ -162,7 +167,11 @@ async def build_weekly_digest(team_id: int, horizon: int = DEFAULT_HORIZON) -> d
         fixtures = await client.get_fixtures()
 
     current_players = _slim_players(bootstrap)
-    save_snapshot(gameweek, current_players)
+    # The pool is league-wide, so it is filed under the GLOBAL gameweek. Filing
+    # it under this manager's current event would let two managers on different
+    # events write the same day's data under two labels, and diff to nothing.
+    global_gameweek = current_event_id(bootstrap)
+    save_player_snapshot(global_gameweek, current_players)
 
     players_by_id = {p["id"]: p for p in current_players}
     outlook = build_team_outlook(bootstrap, fixtures, horizon=horizon)
@@ -192,21 +201,34 @@ async def build_weekly_digest(team_id: int, horizon: int = DEFAULT_HORIZON) -> d
             }
         )
 
-    previous_players = load_snapshot(gameweek - 1)
+    previous = load_previous_player_snapshot(before=global_gameweek)
     squad_ids = {p["element"] for p in picks_data["picks"]}
     alerts = (
-        alerts_for_squad(previous_players, current_players, squad_ids)
-        if previous_players is not None
+        alerts_for_squad(previous[1], current_players, squad_ids)
+        if previous is not None
         else []
     )
 
     _attach_alternatives(squad, current_players, outlook, squad_ids, alerts)
 
+    save_team_snapshot(
+        team_id,
+        gameweek,
+        {
+            "team_id": team_id,
+            "gameweek": gameweek,
+            "entry_history": picks_data["entry_history"],
+            "active_chip": picks_data["active_chip"],
+            "squad": squad,
+        },
+    )
+
     return {
         "team_id": team_id,
         "gameweek": gameweek,
         "horizon": horizon,
-        "has_previous_snapshot": previous_players is not None,
+        "has_previous_snapshot": previous is not None,
+        "compared_against_gameweek": previous[0] if previous else None,
         "entry_history": picks_data["entry_history"],
         "active_chip": picks_data["active_chip"],
         "alerts": alerts,

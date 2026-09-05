@@ -14,6 +14,18 @@ import httpx
 BASE_URL = "https://fantasy.premierleague.com/api"
 
 
+def current_event_id(bootstrap: dict) -> int:
+    """The global current/next gameweek, read from an already-fetched payload.
+
+    Split out from the client method so callers holding a bootstrap response
+    don't have to download it a second time just to learn the gameweek.
+    """
+    for event in bootstrap["events"]:
+        if event["is_current"] or event["is_next"]:
+            return event["id"]
+    return bootstrap["events"][-1]["id"]
+
+
 class FPLClient:
     """Async wrapper for the FPL public API.
 
@@ -69,12 +81,7 @@ class FPLClient:
         have picks for gameweeks before they created a team — use
         get_entry_current_event() for a manager-specific lookup instead.
         """
-        data = await self.get_bootstrap_static()
-        for event in data["events"]:
-            if event["is_current"] or event["is_next"]:
-                return event["id"]
-        # Fallback: last event in the list
-        return data["events"][-1]["id"]
+        return current_event_id(await self.get_bootstrap_static())
 
     async def get_entry_current_event(self, team_id: int) -> int:
         """The most recent gameweek this specific manager actually has
