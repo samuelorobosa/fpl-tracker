@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FPL Weekly Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700;9..40,900&display=swap" rel="stylesheet" />
+<style>
+  /* Premier League design language: deep purple chrome, square edges
+     (nothing on the PL site is rounded), pink/cyan/green accents, and the
+     familiar green-to-maroon fixture difficulty scale. */
+  :root {
+    --pl-purple: #37003c;
+    --pl-deep: #24002a;
+    --pl-pink: #ff2882;
+    --pl-cyan: #04f5ff;
+    --pl-green: #00ff87;
+    --bg: #f2f0f3;
+    --card: #ffffff;
+    --border: #e3dfe5;
+    --text: #1b1b1d;
+    --muted: #6b6b76;
+    --warn: #b8630a;
+    --critical: #d10a3f;
+    --info: #0a58b8;
+    --fdr-1: #00ff87;
+    --fdr-2: #01fc7a;
+    --fdr-3: #ebebeb;
+    --fdr-4: #ff1751;
+    --fdr-5: #80072d;
+  }
+  * { box-sizing: border-box; border-radius: 0; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---- Top nav ---- */
+  .nav { background: var(--pl-purple); }
+  .nav .wrap {
+    display: flex; align-items: center; justify-content: space-between;
+    height: 58px;
+  }
+  .brand { display: flex; align-items: center; gap: 11px; }
+  .ball { width: 26px; height: 26px; border-radius: 50%; background: #fff; position: relative; flex: none; }
+  .ball::before, .ball::after { content: ""; position: absolute; border-radius: 50%; }
+  .ball::before { inset: 5px 9px 13px 5px; background: var(--pl-pink); }
+  .ball::after { inset: 12px 5px 5px 11px; background: var(--pl-cyan); }
+  .brand .name {
+    color: #fff; font-weight: 900; font-size: 17px; letter-spacing: -0.4px;
+  }
+  .brand .name em { font-style: normal; color: var(--pl-cyan); }
+  .nav .meta {
+    color: rgba(255,255,255,0.5); font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1.6px;
+  }
+  .rule { height: 3px; background: linear-gradient(90deg, var(--pl-pink), var(--pl-cyan) 55%, var(--pl-green)); }
+
+  /* ---- Control bar ---- */
+  .bar { background: var(--pl-deep); }
+  .bar .wrap { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; padding-top: 16px; padding-bottom: 16px; }
+  .field { position: relative; display: flex; flex-direction: column; }
+  .field > .dd-label { display: block; }
+  .field > label, .field > .dd-label {
+    font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.4px;
+    color: rgba(255,255,255,0.45); margin-bottom: 5px;
+  }
+  input, select, button { font-family: inherit; font-size: 14px; }
+  input, .select {
+    height: 40px; border: 1px solid rgba(255,255,255,0.18);
+    background: rgba(255,255,255,0.06); color: #fff;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  input { width: 168px; padding: 0 12px; font-weight: 500; }
+  /* Strip the native number spinners — they break the flat PL look. */
+  input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+  input::-webkit-outer-spin-button, input::-webkit-inner-spin-button {
+    -webkit-appearance: none; margin: 0;
+  }
+  input::placeholder { color: rgba(255,255,255,0.4); }
+  input:hover, .select:hover { border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.1); }
+  input:focus-visible, select:focus-visible, button:focus-visible {
+    outline: 2px solid var(--pl-cyan); outline-offset: 1px;
+  }
+  /* Custom dropdown. A native <select> only ever lets you style the closed
+     control — the open list is drawn by the OS and ignores CSS entirely — so
+     this is a button + listbox pair instead, keyboard behaviour included. */
+  .dropdown { position: relative; }
+  .dd-toggle {
+    height: 40px; width: 100%; padding: 0 38px 0 12px;
+    display: flex; align-items: center;
+    background: rgba(255,255,255,0.06); color: #fff;
+    border: 1px solid rgba(255,255,255,0.18);
+    font-size: 14px; font-weight: 500; text-transform: none; letter-spacing: 0;
+    cursor: pointer; white-space: nowrap;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .dd-toggle:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.4); color: #fff; }
+  .dd-toggle::after {
+    content: ""; position: absolute; right: 14px; top: 16px; pointer-events: none;
+    width: 7px; height: 7px;
+    border-right: 2px solid var(--pl-cyan); border-bottom: 2px solid var(--pl-cyan);
+    transform: rotate(45deg); transition: transform 0.15s;
+  }
+  .dropdown.open .dd-toggle { border-color: var(--pl-cyan); background: rgba(255,255,255,0.12); }
+  .dropdown.open .dd-toggle::after { transform: rotate(-135deg); top: 19px; }
+  .dd-menu {
+    position: absolute; top: calc(100% + 4px); left: 0; min-width: 100%; z-index: 40;
+    margin: 0; padding: 4px 0; list-style: none;
+    background: var(--pl-purple); border: 1px solid var(--pl-cyan);
+    box-shadow: 0 12px 28px rgba(0,0,0,0.35);
+  }
+  .dd-menu[hidden] { display: none; }
+  .dd-menu li {
+    padding: 10px 14px; color: rgba(255,255,255,0.85); font-size: 14px;
+    cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 10px;
+  }
+  .dd-menu li::before {
+    content: ""; width: 3px; height: 14px; background: transparent; flex: none;
+  }
+  .dd-menu li:hover, .dd-menu li.active { background: rgba(255,255,255,0.1); color: #fff; }
+  .dd-menu li[aria-selected="true"] { color: #fff; font-weight: 700; }
+  .dd-menu li[aria-selected="true"]::before { background: var(--pl-pink); }
+  button {
+    height: 40px; padding: 0 20px; border: none; cursor: pointer;
+    font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px;
+    background: var(--pl-pink); color: #fff; transition: background 0.15s, color 0.15s;
+    align-self: flex-end;
+  }
+  button:hover { background: var(--pl-cyan); color: var(--pl-purple); }
+  button.secondary { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.25); }
+  button.secondary:hover { background: #fff; color: var(--pl-purple); border-color: #fff; }
+
+  /* ---- Stat strip ---- */
+  .stats { background: var(--pl-purple); }
+  /* One unbroken row — the strip scrolls sideways rather than wrapping,
+     which would leave a ragged half-empty second row on narrow screens. */
+  .stats .wrap { display: flex; padding: 0; overflow-x: auto; scrollbar-width: none; }
+  .stats .wrap::-webkit-scrollbar { display: none; }
+  .stat {
+    flex: 1 0 auto; min-width: 116px; padding: 14px 20px 16px;
+    border-left: 1px solid rgba(255,255,255,0.12);
+  }
+  .stat:first-child { border-left: none; padding-left: 24px; }
+  .stat .k {
+    font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.4px;
+    color: rgba(255,255,255,0.5);
+  }
+  .stat .v { font-size: 24px; font-weight: 900; margin-top: 3px; letter-spacing: -0.8px; color: #fff; }
+  .stat .v.pink { color: var(--pl-pink); }
+  .stat .v.cyan { color: var(--pl-cyan); }
+  .stat .v.green { color: var(--pl-green); }
+
+  /* ---- Cards ---- */
+  main { padding: 24px 0 48px; }
+  .card { background: var(--card); border: 1px solid var(--border); margin-bottom: 20px; }
+  .card > h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1.6px;
+    margin: 0; padding: 14px 18px; color: var(--pl-purple); font-weight: 700;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .card > h2::before { content: ""; width: 4px; height: 13px; background: var(--pl-pink); flex: none; }
+  .card > .body { padding: 6px 18px 14px; }
+  .scroll { overflow-x: auto; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th {
+    color: var(--muted); font-weight: 700; font-size: 9px;
+    text-transform: uppercase; letter-spacing: 1.2px;
+    border-bottom: 2px solid var(--pl-purple);
+  }
+  tbody tr { transition: background 0.12s; }
+  tbody tr:hover { background: #faf6fb; }
+  tbody tr:last-child td { border-bottom: none; }
+  tr.bench td { color: var(--muted); background: #fafafb; }
+  td.rail { border-left: 3px solid transparent; }
+  tr.bench td.rail { border-left-color: var(--border); }
+  tr.flagged td.rail { border-left-color: var(--warn); }
+  td.name { font-weight: 700; }
+
+  .badge {
+    display: inline-block; font-size: 9px; font-weight: 900;
+    padding: 2px 5px; margin-left: 6px; vertical-align: middle; letter-spacing: 0.5px;
+  }
+  .badge.c { background: var(--pl-purple); color: var(--pl-green); }
+  .badge.v { background: var(--border); color: var(--pl-purple); }
+  .status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 8px; }
+  .status-a { background: #00c46a; }
+  .status-d { background: #ffb703; }
+  .status-i, .status-u, .status-s, .status-n { background: var(--critical); }
+
+  /* Fixture difficulty chips on the PL's own 1-5 scale */
+  .fdr { display: inline-flex; gap: 2px; }
+  .fdr span {
+    min-width: 46px; text-align: center; padding: 4px 6px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.3px; color: var(--pl-purple);
+  }
+  .fdr-1 { background: var(--fdr-1); }
+  .fdr-2 { background: var(--fdr-2); }
+  .fdr-3 { background: var(--fdr-3); }
+  .fdr-4 { background: var(--fdr-4); color: #fff; }
+  .fdr-5 { background: var(--fdr-5); color: #fff; }
+  .avg { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .news { color: var(--muted); font-size: 12px; white-space: normal; min-width: 200px; }
+
+  .alert {
+    padding: 11px 14px; margin: 9px 0; font-size: 13px;
+    border-left: 4px solid var(--border); background: #fafafb;
+  }
+  .alert.warning { border-left-color: var(--warn); background: #fff8ee; }
+  .alert.critical { border-left-color: var(--critical); background: #fff0f3; }
+  .alert.info { border-left-color: var(--info); background: #eff4ff; }
+
+  .runs { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 8px 28px; }
+  .run-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .run-row .team { font-weight: 900; width: 44px; letter-spacing: -0.2px; }
+  .sub-head {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 1.4px; color: var(--pl-purple);
+    margin: 10px 0 2px; font-weight: 700; padding-bottom: 6px; border-bottom: 2px solid var(--pl-purple);
+  }
+  .empty, .loading { color: var(--muted); font-size: 13px; padding: 12px 0; }
+  .loading::after { content: " ●"; animation: pulse 1s infinite; color: var(--pl-pink); }
+  @keyframes pulse { 50% { opacity: 0.15; } }
+</style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="wrap">
+      <div class="brand">
+        <div class="ball" aria-hidden="true"></div>
+        <div class="name">Weekly <em>Tracker</em></div>
+      </div>
+      <div class="meta">Fantasy Premier League</div>
+    </div>
+  </nav>
+  <div class="rule"></div>
+
+  <div class="bar">
+    <div class="wrap">
+      <div class="field">
+        <label for="teamId">Team ID</label>
+        <input id="teamId" type="number" placeholder="e.g. 3732633" />
+      </div>
+      <div class="field">
+        <span class="dd-label" id="horizonLabel">Horizon</span>
+        <div class="dropdown" id="horizonDropdown">
+          <button type="button" class="dd-toggle" aria-haspopup="listbox"
+                  aria-expanded="false" aria-labelledby="horizonLabel horizonText">
+            <span id="horizonText">Next 5 gameweeks</span>
+          </button>
+          <ul class="dd-menu" role="listbox" aria-labelledby="horizonLabel" hidden>
+            <li role="option" data-value="3" aria-selected="false">Next 3 gameweeks</li>
+            <li role="option" data-value="5" aria-selected="true">Next 5 gameweeks</li>
+            <li role="option" data-value="8" aria-selected="false">Next 8 gameweeks</li>
+          </ul>
+        </div>
+      </div>
+      <button onclick="loadDigest()">Load digest</button>
+      <button class="secondary" onclick="loadFdr()">League fixtures</button>
+    </div>
+  </div>
+
+  <div class="stats" id="stats" hidden><div class="wrap"></div></div>
+
+  <main>
+   <div class="wrap">
+    <div class="card">
+      <h2 id="alertsTitle">Alerts</h2>
+      <div class="body"><div id="alertsContent" class="empty">Load a digest to run this week's diff.</div></div>
+    </div>
+
+    <div class="card">
+      <h2 id="squadTitle">Squad</h2>
+      <div class="body scroll"><div id="squadContent" class="empty">Enter a team ID and load the digest.</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Fixture Runs</h2>
+      <div class="body" id="runsContent"><div class="empty">Easiest and hardest runs in the league appear here.</div></div>
+    </div>
+   </div>
+  </main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+/* --- Custom dropdown -------------------------------------------------
+   Exposes horizonValue() so the rest of the app reads a selection the same
+   way it read select.value before. */
+const dd = $("horizonDropdown");
+const ddToggle = dd.querySelector(".dd-toggle");
+const ddMenu = dd.querySelector(".dd-menu");
+const ddOptions = [...ddMenu.querySelectorAll("li")];
+let ddValue = "5";
+
+const horizonValue = () => ddValue;
+
+function openDd(open) {
+  dd.classList.toggle("open", open);
+  ddMenu.hidden = !open;
+  ddToggle.setAttribute("aria-expanded", String(open));
+  if (open) {
+    const current = ddOptions.find((o) => o.dataset.value === ddValue);
+    ddOptions.forEach((o) => o.classList.toggle("active", o === current));
+  }
+}
+
+function pickDd(option) {
+  ddValue = option.dataset.value;
+  ddOptions.forEach((o) => o.setAttribute("aria-selected", String(o === option)));
+  $("horizonText").textContent = option.textContent;
+  openDd(false);
+  ddToggle.focus();
+}
+
+ddToggle.addEventListener("click", () => openDd(ddMenu.hidden));
+ddOptions.forEach((o) => o.addEventListener("click", () => pickDd(o)));
+document.addEventListener("click", (e) => { if (!dd.contains(e.target)) openDd(false); });
+
+dd.addEventListener("keydown", (e) => {
+  const open = !ddMenu.hidden;
+  if (e.key === "Escape") { openDd(false); ddToggle.focus(); return; }
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    const active = ddMenu.querySelector("li.active");
+    open && active ? pickDd(active) : openDd(true);
+    return;
+  }
+  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+  e.preventDefault();
+  if (!open) { openDd(true); return; }
+  const active = ddMenu.querySelector("li.active") || ddOptions[0];
+  const next = ddOptions[
+    Math.min(ddOptions.length - 1, Math.max(0, ddOptions.indexOf(active) + (e.key === "ArrowDown" ? 1 : -1)))
+  ];
+  ddOptions.forEach((o) => o.classList.toggle("active", o === next));
+});
+
+function teamId() {
+  const id = $("teamId").value;
+  if (!id) { $("teamId").focus(); }
+  return id;
+}
+
+function fdrChips(fixtures) {
+  if (!fixtures || !fixtures.length) return '<span class="news">—</span>';
+  return '<span class="fdr">' + fixtures.map((f) =>
+    `<span class="fdr-${f.difficulty}" title="GW${f.event}">${esc(f.opponent_short)} (${f.is_home ? "H" : "A"})</span>`
+  ).join("") + "</span>";
+}
+
+function setStats(d) {
+  const h = d.entry_history || {};
+  const flagged = d.squad.filter((p) => p.status !== "a").length;
+  const cells = [
+    ["Gameweek", d.gameweek, ""],
+    ["GW Points", h.points ?? "—", "green"],
+    ["Total", h.total_points ?? "—", ""],
+    ["Overall Rank", h.overall_rank ? h.overall_rank.toLocaleString() : "—", "cyan"],
+    ["Squad Value", h.value ? "£" + (h.value / 10).toFixed(1) + "m" : "—", ""],
+    ["Alerts", d.alerts.length, d.alerts.length ? "pink" : ""],
+    ["Flagged", flagged, flagged ? "pink" : ""],
+  ];
+  $("stats").querySelector(".wrap").innerHTML = cells.map(([k, v, cls]) =>
+    `<div class="stat"><div class="k">${k}</div><div class="v ${cls}">${esc(v)}</div></div>`).join("");
+  $("stats").hidden = false;
+}
+
+async function getJSON(url) {
+  const res = await fetch(url);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || res.statusText);
+  return data;
+}
+
+async function loadDigest() {
+  const id = teamId();
+  if (!id) return;
+  const horizon = horizonValue();
+  $("squadContent").className = "loading";
+  $("squadContent").textContent = "Loading squad and fixtures";
+  $("alertsContent").className = "loading";
+  $("alertsContent").textContent = "Diffing against last week";
+
+  try {
+    const d = await getJSON(`/squad/${id}/digest?horizon=${horizon}`);
+    setStats(d);
+    renderSquad(d);
+    renderAlerts(d);
+    renderRuns(d.easiest_runs, d.hardest_runs, d.horizon);
+  } catch (e) {
+    $("stats").hidden = true;
+    for (const el of ["squadContent", "alertsContent"]) {
+      $(el).className = "empty";
+      $(el).textContent = "Error: " + e.message;
+    }
+  }
+}
+
+function renderSquad(d) {
+  $("squadTitle").textContent = `Squad — Gameweek ${d.gameweek}`;
+  const rows = d.squad.map((p) => {
+    const flagged = p.status !== "a" || p.news;
+    return `<tr class="${p.is_starting ? "" : "bench"} ${flagged ? "flagged" : ""}">
+      <td class="name rail"><span class="status-dot status-${esc(p.status || "a")}"></span>${esc(p.web_name)}
+        ${p.is_captain ? '<span class="badge c">C</span>' : ""}
+        ${p.is_vice_captain ? '<span class="badge v">V</span>' : ""}</td>
+      <td>${esc(p.team_short)}</td>
+      <td>${esc(p.position)}</td>
+      <td>£${esc(p.now_cost)}m</td>
+      <td>${esc(p.form)}</td>
+      <td class="avg">${p.avg_difficulty ?? "—"}</td>
+      <td>${fdrChips(p.fixtures)}</td>
+      <td class="news">${esc(p.news) || "—"}</td>
+    </tr>`;
+  }).join("");
+  $("squadContent").className = "";
+  $("squadContent").innerHTML = `<table>
+    <thead><tr><th>Player</th><th>Team</th><th>Pos</th><th>Price</th><th>Form</th>
+      <th>Avg FDR</th><th>Next ${d.horizon}</th><th>News</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+function renderAlerts(d) {
+  $("alertsTitle").textContent = `Alerts — Gameweek ${d.gameweek}`;
+  if (!d.alerts.length) {
+    $("alertsContent").className = "empty";
+    $("alertsContent").textContent = d.has_previous_snapshot
+      ? "No changes detected since last week's snapshot."
+      : "No snapshot from last week yet — this run saved the baseline to diff against next time.";
+    return;
+  }
+  $("alertsContent").className = "";
+  $("alertsContent").innerHTML = d.alerts.map((a) =>
+    `<div class="alert ${esc(a.severity)}"><strong>${esc(a.web_name)}</strong> — ${esc(a.message)}</div>`).join("");
+}
+
+function runList(title, runs) {
+  const rows = runs.map((r) =>
+    `<div class="run-row"><span class="team">${esc(r.team_short)}</span>
+      <span class="avg">${r.avg_difficulty}</span>
+      <span class="news">${esc(r.run)}</span></div>`).join("");
+  return `<div><div class="sub-head">${title}</div>${rows}</div>`;
+}
+
+function renderRuns(easiest, hardest, horizon) {
+  $("runsContent").innerHTML = `<div class="runs">
+    ${runList(`Easiest next ${horizon}`, easiest)}
+    ${runList(`Hardest next ${horizon}`, hardest)}</div>`;
+}
+
+async function loadFdr() {
+  const horizon = horizonValue();
+  $("runsContent").innerHTML = '<div class="loading">Loading league fixtures</div>';
+  try {
+    const teams = await getJSON(`/fixtures/difficulty?horizon=${horizon}`);
+    const rows = teams.map((t) =>
+      `<tr><td class="name">${esc(t.team_short)}</td><td class="avg">${t.avg_difficulty ?? "—"}</td>
+        <td>${fdrChips(t.fixtures)}</td></tr>`).join("");
+    $("runsContent").innerHTML = `<div class="scroll"><table>
+      <thead><tr><th>Team</th><th>Avg FDR</th><th>Next ${horizon}</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+  } catch (e) {
+    $("runsContent").innerHTML = `<div class="empty">Error: ${esc(e.message)}</div>`;
+  }
+}
+
+$("teamId").addEventListener("keydown", (e) => { if (e.key === "Enter") loadDigest(); });
+</script>
+</body>
+</html>

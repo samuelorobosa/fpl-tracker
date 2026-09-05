@@ -1,0 +1,11 @@
+services:
+  fpl-tracker:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount source code so edits on your Mac show up without rebuilding
+      - ./app:/app/app
+      # Persist weekly snapshots outside the container
+      - ./data:/app/data
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload

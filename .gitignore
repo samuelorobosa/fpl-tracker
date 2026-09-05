@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets
+.env
+.env.*
+
+# Weekly snapshots — regenerated on every run, and large (~170KB each).
+# The directory itself is tracked via data/.gitkeep.
+data/snapshot_gw*.json
+
+# macOS / editors
+.DS_Store
+.idea/
+.vscode/
