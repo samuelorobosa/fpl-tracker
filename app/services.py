@@ -1,6 +1,7 @@
 """Business logic that sits between the FPL client and the API routes."""
 from __future__ import annotations
 
+from .alternatives import flagged_player_ids, group_by_position, suggest_alternatives
 from .diff_engine import diff_players
 from .fixture_difficulty import DEFAULT_HORIZON, build_team_outlook, format_run
 from .fpl_client import FPLClient
@@ -28,6 +29,9 @@ def _slim_players(bootstrap: dict) -> list[dict]:
                 "chance_of_playing_next_round": p.get("chance_of_playing_next_round"),
                 "form": p["form"],
                 "total_points": p["total_points"],
+                # Present in bootstrap-static; used to break ties when ranking
+                # replacement candidates.
+                "expected_goal_involvements": p.get("expected_goal_involvements"),
             }
         )
     return slim
@@ -196,6 +200,8 @@ async def build_weekly_digest(team_id: int, horizon: int = DEFAULT_HORIZON) -> d
         else []
     )
 
+    _attach_alternatives(squad, current_players, outlook, squad_ids, alerts)
+
     return {
         "team_id": team_id,
         "gameweek": gameweek,
@@ -226,3 +232,28 @@ def _rank_runs(outlook: dict[int, dict], reverse: bool) -> list[dict]:
         }
         for e in ranked
     ]
+
+
+def _attach_alternatives(
+    squad: list[dict],
+    pool: list[dict],
+    outlook: dict[int, dict],
+    owned_ids: set[int],
+    alerts: list[SquadAlert],
+) -> None:
+    """Add `suggested_alternatives` in place, but only for players worth
+    reconsidering — an unchanged, in-form player doesn't need a shortlist,
+    and filling one in for all 15 would bury the ones that matter.
+
+    The pool is grouped once and shared across the whole squad; nothing here
+    touches the network.
+    """
+    flagged = flagged_player_ids(squad, {a.player_id for a in alerts})
+    pool_by_position = group_by_position(pool)
+
+    for player in squad:
+        player["suggested_alternatives"] = (
+            suggest_alternatives(player, pool_by_position, outlook, owned_ids)
+            if player["player_id"] in flagged
+            else None
+        )

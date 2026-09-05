@@ -286,7 +286,8 @@
       </div>
       <button onclick="loadDigest()">Load digest</button>
       <button class="secondary" onclick="loadFdr()">League fixtures</button>
-      <button type="button" class="copy" data-copy="all">Copy all for Claude</button>
+      <button type="button" class="copy" data-copy="all">Copy all</button>
+      <button type="button" class="copy" data-download="all">Download JSON</button>
     </div>
   </div>
 
@@ -518,7 +519,7 @@ async function loadFdr() {
 }
 
 /* --- Copy to clipboard --------------------------------------------- */
-const COPY_LABELS = { all: "Copy all for Claude" };
+const COPY_LABELS = { all: "Copy all", download: "Download JSON" };
 const label = (key) => COPY_LABELS[key] || "Copy JSON";
 
 function flash(button, text, key) {
@@ -559,11 +560,7 @@ async function writeClipboard(text) {
 async function copyPayload(key, button) {
   let payload;
   if (key === "all") {
-    // Only the sections actually loaded, in the order the weekly prompt expects.
-    payload = {};
-    for (const k of ["squad", "alerts", "chips", "fixtures"]) {
-      if (latest[k]) payload[k] = latest[k];
-    }
+    payload = combinedPayload();
     if (!Object.keys(payload).length) {
       alert("Nothing loaded yet — load it first.");
       return;
@@ -585,8 +582,46 @@ async function copyPayload(key, button) {
   }
 }
 
+/* Everything loaded, in the order the weekly prompt expects. Shared by the
+   copy-all and download buttons so the two can never drift apart. */
+function combinedPayload() {
+  const payload = {};
+  for (const k of ["squad", "alerts", "chips", "fixtures"]) {
+    if (latest[k]) payload[k] = latest[k];
+  }
+  return payload;
+}
+
+function downloadPayload(button) {
+  const payload = combinedPayload();
+  if (!Object.keys(payload).length) {
+    alert("Nothing loaded yet — load it first.");
+    return;
+  }
+  // A Blob + temporary <a download> keeps this working without the clipboard
+  // API, which is the point of offering it as a fallback.
+  const stamp = latest.squad
+    ? `team${latest.squad.team_id}-gw${latest.squad.gameweek}`
+    : new Date().toISOString().slice(0, 10);
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" })
+  );
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `fpl-digest-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoked on a delay: some browsers cancel an in-flight save if the blob
+  // URL disappears in the same tick as the click.
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  flash(button, "Saved!", "download");
+}
+
 document.querySelectorAll("[data-copy]").forEach((btn) =>
   btn.addEventListener("click", () => copyPayload(btn.dataset.copy, btn)));
+document.querySelectorAll("[data-download]").forEach((btn) =>
+  btn.addEventListener("click", () => downloadPayload(btn)));
 
 $("teamId").addEventListener("keydown", (e) => { if (e.key === "Enter") loadDigest(); });
 </script>
