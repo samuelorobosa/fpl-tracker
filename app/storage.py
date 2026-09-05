@@ -79,8 +79,13 @@ def load_previous_player_snapshot(before: int) -> tuple[int, list[dict]] | None:
     return None if players is None else (gameweek, players)
 
 
+def player_gameweeks() -> list[int]:
+    """Every gameweek with a stored player pool, ascending."""
+    return _gameweeks_in(PLAYERS_DIR) if PLAYERS_DIR.exists() else []
+
+
 def latest_player_gameweek() -> int | None:
-    weeks = _gameweeks_in(PLAYERS_DIR)
+    weeks = player_gameweeks()
     return weeks[-1] if weeks else None
 
 
@@ -103,3 +108,14 @@ def team_gameweeks(team_id: int) -> list[int]:
     """Every gameweek stored for a team, ascending. Empty if never loaded."""
     directory = _team_dir(team_id)
     return _gameweeks_in(directory) if directory.exists() else []
+
+
+def stored_teams() -> dict[str, list[int]]:
+    """Every team with stored history, mapped to its gameweeks."""
+    if not TEAMS_DIR.exists():
+        return {}
+    return {
+        d.name: _gameweeks_in(d)
+        for d in sorted(TEAMS_DIR.iterdir())
+        if d.is_dir()
+    }

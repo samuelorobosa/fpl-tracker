@@ -37,3 +37,15 @@ def test_team_gameweeks_lists_history():
     storage.save_team_snapshot(111, 4, {})
     storage.save_team_snapshot(111, 3, {})
     assert storage.team_gameweeks(111) == [3, 4]
+
+
+def test_status_helpers_report_what_is_stored():
+    assert storage.player_gameweeks() == []
+    assert storage.stored_teams() == {}
+
+    storage.save_player_snapshot(3, [{"id": 1}])
+    storage.save_player_snapshot(4, [{"id": 1}])
+    storage.save_team_snapshot(3732633, 3, {})
+
+    assert storage.player_gameweeks() == [3, 4]
+    assert storage.stored_teams() == {"3732633": [3]}

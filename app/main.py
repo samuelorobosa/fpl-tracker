@@ -10,10 +10,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .fpl_client import FPLClient
 from .schemas import SquadAlertsResponse
+from . import storage
 from .fixture_difficulty import DEFAULT_HORIZON, build_team_outlook
 from .services import (
     _slim_players,
@@ -27,6 +29,28 @@ app = FastAPI(
     description="Pulls live data from the public FPL API and flags squad-relevant changes week to week.",
     version="0.1.0",
 )
+
+
+@app.get("/", include_in_schema=False)
+async def root() -> RedirectResponse:
+    """The dashboard is the point of visiting this host, so send / there."""
+    return RedirectResponse(url="/ui/")
+
+
+@app.get("/storage")
+async def storage_status() -> dict:
+    """What snapshots are on disk, and where.
+
+    Exists to make persistence verifiable: after a redeploy this should still
+    list the gameweeks stored before it. If it comes back empty, the disk
+    isn't mounted where the app is writing, and alerts will never fire.
+    """
+    # Read through the module so the paths reflect any runtime override.
+    return {
+        "data_dir": str(storage.DATA_DIR),
+        "player_gameweeks": storage.player_gameweeks(),
+        "teams": storage.stored_teams(),
+    }
 
 
 @app.get("/health")
