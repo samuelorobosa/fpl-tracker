@@ -1,7 +1,12 @@
 """Business logic that sits between the FPL client and the API routes."""
 from __future__ import annotations
 
-from .alternatives import flagged_player_ids, group_by_position, suggest_alternatives
+from .alternatives import (
+    AFFORDABILITY_NOTE,
+    flagged_player_ids,
+    group_by_position,
+    suggest_alternatives,
+)
 from .chips import chip_status
 from .diff_engine import diff_players
 from .fixture_difficulty import DEFAULT_HORIZON, build_team_outlook, format_run
@@ -211,7 +216,9 @@ async def build_weekly_digest(team_id: int, horizon: int = DEFAULT_HORIZON) -> d
         else []
     )
 
-    _attach_alternatives(squad, current_players, outlook, squad_ids, alerts)
+    # bank is in tenths of a million, like every other price in the API.
+    bank = (picks_data["entry_history"].get("bank") or 0) / 10
+    _attach_alternatives(squad, current_players, outlook, squad_ids, alerts, bank)
 
     save_team_snapshot(
         team_id,
@@ -235,6 +242,8 @@ async def build_weekly_digest(team_id: int, horizon: int = DEFAULT_HORIZON) -> d
         "active_chip": picks_data["active_chip"],
         "alerts": alerts,
         "chips": chip_status(bootstrap, history, gameweek, picks_data["active_chip"]),
+        "bank": bank,
+        "alternatives_note": AFFORDABILITY_NOTE,
         "squad": squad,
         "easiest_runs": _rank_runs(outlook, reverse=False)[:5],
         "hardest_runs": _rank_runs(outlook, reverse=True)[:5],
@@ -265,6 +274,7 @@ def _attach_alternatives(
     outlook: dict[int, dict],
     owned_ids: set[int],
     alerts: list[SquadAlert],
+    bank: float,
 ) -> None:
     """Add `suggested_alternatives` in place, but only for players worth
     reconsidering — an unchanged, in-form player doesn't need a shortlist,
@@ -278,7 +288,7 @@ def _attach_alternatives(
 
     for player in squad:
         player["suggested_alternatives"] = (
-            suggest_alternatives(player, pool_by_position, outlook, owned_ids)
+            suggest_alternatives(player, pool_by_position, outlook, owned_ids, bank)
             if player["player_id"] in flagged
             else None
         )

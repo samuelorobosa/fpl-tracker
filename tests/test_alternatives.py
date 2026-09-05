@@ -39,19 +39,43 @@ def test_excludes_owned_unavailable_and_unaffordable():
         pool_player(1),                       # fine
         pool_player(2),                       # owned
         pool_player(3, status="i"),           # injured
-        pool_player(4, now_cost=5.6),         # over budget (5.0 + 0.5 buffer)
+        pool_player(4, now_cost=5.6),         # over budget
         pool_player(5, position="FWD"),       # wrong position
     ]
     out = suggest_alternatives(
-        squad_player(99), group_by_position(pool), OUTLOOK, owned_ids={2}
+        squad_player(99), group_by_position(pool), OUTLOOK, owned_ids={2}, bank=0.5
     )
     assert [c["web_name"] for c in out] == ["P1"]
 
 
-def test_price_buffer_is_inclusive():
+def test_empty_bank_allows_nothing_dearer_than_the_outgoing_player():
+    """The bug this replaced: a flat +0.5 buffer invented money that wasn't
+    in the bank, so it suggested transfers that couldn't be made."""
+    pool = [pool_player(1, now_cost=5.1), pool_player(2, now_cost=5.0)]
+    out = suggest_alternatives(squad_player(99, now_cost=5.0),
+                               group_by_position(pool), OUTLOOK, set(), bank=0.0)
+    assert [c["web_name"] for c in out] == ["P2"]
+
+
+def test_bank_extends_the_budget():
+    pool = [pool_player(1, now_cost=6.5), pool_player(2, now_cost=6.6)]
+    out = suggest_alternatives(squad_player(99, now_cost=5.0),
+                               group_by_position(pool), OUTLOOK, set(), bank=1.5)
+    assert [c["web_name"] for c in out] == ["P1"]  # 6.5 affordable, 6.6 is not
+
+
+def test_budget_boundary_is_inclusive():
     pool = [pool_player(1, now_cost=5.5)]
-    out = suggest_alternatives(squad_player(99), group_by_position(pool), OUTLOOK, set())
+    out = suggest_alternatives(squad_player(99), group_by_position(pool), OUTLOOK,
+                               set(), bank=0.5)
     assert len(out) == 1
+
+
+def test_bank_defaults_to_nothing_rather_than_assuming_funds():
+    pool = [pool_player(1, now_cost=5.1)]
+    out = suggest_alternatives(squad_player(99, now_cost=5.0),
+                               group_by_position(pool), OUTLOOK, set())
+    assert out == []
 
 
 def test_ranked_by_form_then_fixtures():
@@ -60,20 +84,23 @@ def test_ranked_by_form_then_fixtures():
         pool_player(2, form="8.0"),
         pool_player(3, form="6.0"),
     ]
-    out = suggest_alternatives(squad_player(99), group_by_position(pool), OUTLOOK, set())
+    out = suggest_alternatives(squad_player(99), group_by_position(pool), OUTLOOK,
+                               set(), bank=0.5)
     assert [c["web_name"] for c in out] == ["P2", "P3", "P1"]
 
 
 def test_easier_fixtures_break_a_form_tie():
     pool = [pool_player(1, team_id=1), pool_player(2, team_id=2, team_short="LIV")]
-    out = suggest_alternatives(squad_player(99), group_by_position(pool), OUTLOOK, set())
+    out = suggest_alternatives(squad_player(99), group_by_position(pool), OUTLOOK,
+                               set(), bank=0.5)
     assert out[0]["web_name"] == "P2"  # same form, easier run
     assert out[0]["avg_difficulty"] == 2.0
 
 
 def test_capped_at_three():
     pool = [pool_player(i) for i in range(1, 8)]
-    out = suggest_alternatives(squad_player(99), group_by_position(pool), OUTLOOK, set())
+    out = suggest_alternatives(squad_player(99), group_by_position(pool), OUTLOOK,
+                               set(), bank=0.5)
     assert len(out) == 3
 
 

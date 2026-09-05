@@ -488,7 +488,8 @@ async function loadDigest() {
     // Cached raw, so the copy buttons never re-hit the API.
     latest.squad = {
       team_id: d.team_id, gameweek: d.gameweek, horizon: d.horizon,
-      entry_history: d.entry_history, squad: d.squad,
+      bank: d.bank, entry_history: d.entry_history,
+      alternatives_note: d.alternatives_note, squad: d.squad,
     };
     latest.alerts = {
       gameweek: d.gameweek,
@@ -515,6 +516,10 @@ async function loadDigest() {
 }
 
 const COLUMNS = 8;
+// Set per render, so the shortlist header states the real budget rather than
+// the flat buffer the engine used to assume.
+let BANK = 0;
+let ALT_NOTE = "";
 
 function alternativesRow(player) {
   const alts = player.suggested_alternatives;
@@ -528,12 +533,16 @@ function alternativesRow(player) {
   return `<tr class="alt-detail" data-alts-for="${player.player_id}" hidden>
     <td colspan="${COLUMNS}"><div class="alt-inner">
       <div class="alt-head">Replacements for ${esc(player.web_name)} — same position,
-        available, up to £${(player.now_cost + 0.5).toFixed(1)}m</div>
+        available, up to £${(player.now_cost + BANK).toFixed(1)}m
+        (his £${esc(player.now_cost)}m + £${BANK.toFixed(1)}m in the bank)</div>
       <div class="alt-grid">${cards}</div>
+      <div class="note">${esc(ALT_NOTE)}</div>
     </div></td></tr>`;
 }
 
 function renderSquad(d) {
+  BANK = d.bank ?? 0;
+  ALT_NOTE = d.alternatives_note || "";
   $("squadTitle").textContent = `Squad — Gameweek ${d.gameweek}`;
   let benchStarted = false;
   const rows = d.squad.map((p) => {

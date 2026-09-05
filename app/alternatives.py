@@ -8,9 +8,14 @@ the FPL API.
 """
 from __future__ import annotations
 
-# How much more expensive than the outgoing player a candidate may be. Keeps
-# suggestions to realistic transfers rather than aspirational upgrades.
-PRICE_BUFFER = 0.5
+# What a suggestion assumes about your budget. Deliberately single-transfer:
+# working out which two or three players to sell together to fund one bigger
+# upgrade is a much harder search, and it matters occasionally rather than
+# weekly, so the shortlist stays honest about what it does not model.
+AFFORDABILITY_NOTE = (
+    "Affordable if this is your only transfer this gameweek. Selling multiple "
+    "players to fund a bigger upgrade isn't factored in here."
+)
 
 # Number of starters (by lowest form) treated as underperforming. Restricted to
 # the XI on purpose: unused bench players sit at form 0.0 and would otherwise
@@ -69,12 +74,17 @@ def suggest_alternatives(
     pool_by_position: dict[str, list[dict]],
     outlook: dict[int, dict],
     owned_ids: set[int],
+    bank: float = 0.0,
     limit: int = MAX_SUGGESTIONS,
 ) -> list[dict]:
     """Top replacements for one squad player: same position, affordable,
     available, and not already owned.
+
+    Affordability is what this player sells for plus the money actually in the
+    bank. An earlier version used a flat +£0.5m buffer, which invented funds
+    that might not exist and recommended transfers that could not be made.
     """
-    budget = (player.get("now_cost") or 0) + PRICE_BUFFER
+    budget = (player.get("now_cost") or 0) + bank
     candidates = []
     for other in pool_by_position.get(player.get("position"), []):
         if other["id"] in owned_ids:
