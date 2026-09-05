@@ -17,9 +17,16 @@ diff engine or the API layer.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+# Overridable so a deployment can point at a mounted volume. Snapshots MUST
+# land on persistent storage: on an ephemeral filesystem every restart wipes
+# the baseline, and alerts silently return nothing forever.
+DATA_DIR = Path(
+    os.environ.get("FPL_DATA_DIR")
+    or Path(__file__).resolve().parent.parent / "data"
+)
 PLAYERS_DIR = DATA_DIR / "players"
 TEAMS_DIR = DATA_DIR / "teams"
 

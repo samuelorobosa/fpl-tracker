@@ -26,7 +26,7 @@ Dashboard at `/ui/`, interactive API docs at `/docs`.
 
 ```bash
 python3 -m venv venv
-venv/bin/pip install -r requirements.txt
+venv/bin/pip install -r requirements-dev.txt
 venv/bin/python -m uvicorn app.main:app --reload
 ```
 
@@ -53,7 +53,33 @@ Then open http://127.0.0.1:8000/ui/ and enter an FPL team id.
   empty. Alerts compare against the most recent *earlier* snapshot rather than
   `gameweek - 1`, so skipping a week doesn't silently disable them.
 
+## Deploying (Render)
+
+`render.yaml` is a blueprint: point Render at this repo and it reads the config.
+
+```bash
+git push            # Render auto-deploys on commit once connected
+```
+
+Two things that are not optional:
+
+- **A persistent disk.** Alerts diff this week's player pool against last
+  week's, so the snapshot directory must survive restarts. `render.yaml`
+  mounts a 1GB disk at `/var/data`, and `FPL_DATA_DIR` points there. Disks
+  require a paid instance — on the free tier the filesystem is wiped on every
+  deploy and spin-down, and alerts silently never fire.
+- **One worker.** Snapshots are flat files; concurrent workers would race
+  writing them.
+
+The container binds `$PORT`, which Render injects. `/health` is the health
+check path.
+
 ## Tests
+
+```bash
+venv/bin/pip install -r requirements-dev.txt
+```
+
 
 ```bash
 venv/bin/python -m pytest

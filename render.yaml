@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: fpl-tracker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: frankfurt          # closest Render region to the UK
+    plan: starter              # disks require a paid instance; free has none
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    disk:
+      name: fpl-data
+      mountPath: /var/data     # matches FPL_DATA_DIR in the Dockerfile
+      sizeGB: 1

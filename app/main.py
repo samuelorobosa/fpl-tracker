@@ -7,6 +7,8 @@ Then visit http://127.0.0.1:8000/docs for interactive Swagger docs.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
@@ -127,4 +129,7 @@ async def get_weekly_digest(team_id: int, horizon: int = DEFAULT_HORIZON) -> dic
 
 # Mounted last so it never shadows the API routes above — this serves the
 # single-page dashboard at http://127.0.0.1:8000/ui/
-app.mount("/ui", StaticFiles(directory="app/static", html=True), name="ui")
+# Resolved from this file rather than the process's working directory, which
+# a host is free to set to anything — a relative path crashes on startup.
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+app.mount("/ui", StaticFiles(directory=STATIC_DIR, html=True), name="ui")
