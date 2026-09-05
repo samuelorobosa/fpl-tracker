@@ -168,6 +168,25 @@
     display: flex; align-items: center; gap: 10px;
   }
   .card > h2::before { content: ""; width: 4px; height: 13px; background: var(--pl-pink); flex: none; }
+  .card > h2 .copy { margin-left: auto; }
+
+  /* Ghost buttons — deliberately quieter than the pink action buttons in the
+     control bar, so they read as utilities rather than primary actions. */
+  .copy {
+    height: 26px; padding: 0 10px; background: transparent;
+    border: 1px solid var(--border); color: var(--muted);
+    font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px;
+    cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .copy:hover { background: var(--pl-purple); border-color: var(--pl-purple); color: #fff; }
+  .copy.done, .copy.done:hover { background: var(--pl-green); border-color: var(--pl-green); color: var(--pl-purple); }
+  /* Same control in the purple bar needs the inverse treatment. */
+  .bar .copy {
+    height: 40px; padding: 0 20px; font-size: 12px; align-self: flex-end;
+    border-color: rgba(255,255,255,0.25); color: #fff;
+  }
+  .bar .copy:hover { background: #fff; color: var(--pl-purple); border-color: #fff; }
+  .bar .copy.done, .bar .copy.done:hover { background: var(--pl-green); border-color: var(--pl-green); color: var(--pl-purple); }
   .card > .body { padding: 6px 18px 14px; }
   .scroll { overflow-x: auto; }
 
@@ -267,6 +286,7 @@
       </div>
       <button onclick="loadDigest()">Load digest</button>
       <button class="secondary" onclick="loadFdr()">League fixtures</button>
+      <button type="button" class="copy" data-copy="all">Copy all for Claude</button>
     </div>
   </div>
 
@@ -275,17 +295,20 @@
   <main>
    <div class="wrap">
     <div class="card">
-      <h2 id="alertsTitle">Alerts</h2>
+      <h2><span id="alertsTitle">Alerts</span>
+        <button type="button" class="copy" data-copy="alerts">Copy JSON</button></h2>
       <div class="body"><div id="alertsContent" class="empty">Load a digest to run this week's diff.</div></div>
     </div>
 
     <div class="card">
-      <h2 id="squadTitle">Squad</h2>
+      <h2><span id="squadTitle">Squad</span>
+        <button type="button" class="copy" data-copy="squad">Copy JSON</button></h2>
       <div class="body scroll"><div id="squadContent" class="empty">Enter a team ID and load the digest.</div></div>
     </div>
 
     <div class="card">
-      <h2>Fixture Runs</h2>
+      <h2><span>Fixture Runs</span>
+        <button type="button" class="copy" data-copy="fixtures">Copy JSON</button></h2>
       <div class="body" id="runsContent"><div class="empty">Easiest and hardest runs in the league appear here.</div></div>
     </div>
    </div>
@@ -293,6 +316,10 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+
+/* Every endpoint response is stashed here as it loads, so the copy buttons
+   are instant and never re-fetch. */
+const latest = { squad: null, alerts: null, chips: null, fixtures: null };
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -396,6 +423,18 @@ async function loadDigest() {
 
   try {
     const d = await getJSON(`/squad/${id}/digest?horizon=${horizon}`);
+    // Cached raw, so the copy buttons never re-hit the API.
+    latest.squad = {
+      team_id: d.team_id, gameweek: d.gameweek, horizon: d.horizon,
+      entry_history: d.entry_history, squad: d.squad,
+    };
+    latest.alerts = {
+      gameweek: d.gameweek, has_previous_snapshot: d.has_previous_snapshot, alerts: d.alerts,
+    };
+    latest.chips = { active_chip: d.active_chip };
+    latest.fixtures = {
+      horizon: d.horizon, easiest_runs: d.easiest_runs, hardest_runs: d.hardest_runs,
+    };
     setStats(d);
     renderSquad(d);
     renderAlerts(d);
@@ -466,6 +505,7 @@ async function loadFdr() {
   $("runsContent").innerHTML = '<div class="loading">Loading league fixtures</div>';
   try {
     const teams = await getJSON(`/fixtures/difficulty?horizon=${horizon}`);
+    latest.fixtures = { horizon: Number(horizon), teams };
     const rows = teams.map((t) =>
       `<tr><td class="name">${esc(t.team_short)}</td><td class="avg">${t.avg_difficulty ?? "—"}</td>
         <td>${fdrChips(t.fixtures)}</td></tr>`).join("");
@@ -476,6 +516,77 @@ async function loadFdr() {
     $("runsContent").innerHTML = `<div class="empty">Error: ${esc(e.message)}</div>`;
   }
 }
+
+/* --- Copy to clipboard --------------------------------------------- */
+const COPY_LABELS = { all: "Copy all for Claude" };
+const label = (key) => COPY_LABELS[key] || "Copy JSON";
+
+function flash(button, text, key) {
+  button.textContent = text;
+  button.classList.add("done");
+  clearTimeout(button._t);
+  button._t = setTimeout(() => {
+    button.textContent = label(key);
+    button.classList.remove("done");
+  }, 1500);
+}
+
+async function writeClipboard(text) {
+  // navigator.clipboard is undefined outside secure contexts (plain http on a
+  // non-localhost host), so fall back to the legacy selection-based copy.
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) { /* fall through to the legacy path */ }
+
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.cssText = "position:fixed;top:-1000px;opacity:0;";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function copyPayload(key, button) {
+  let payload;
+  if (key === "all") {
+    // Only the sections actually loaded, in the order the weekly prompt expects.
+    payload = {};
+    for (const k of ["squad", "alerts", "chips", "fixtures"]) {
+      if (latest[k]) payload[k] = latest[k];
+    }
+    if (!Object.keys(payload).length) {
+      alert("Nothing loaded yet — load it first.");
+      return;
+    }
+  } else {
+    if (!latest[key]) {
+      alert("Nothing loaded yet — load it first.");
+      return;
+    }
+    payload = latest[key];
+  }
+
+  const ok = await writeClipboard(JSON.stringify(payload, null, 2));
+  if (ok) {
+    flash(button, "Copied!", key);
+  } else {
+    alert("Couldn't copy to the clipboard — your browser blocked it. "
+      + "Open the dashboard over http://127.0.0.1 (or https) and try again.");
+  }
+}
+
+document.querySelectorAll("[data-copy]").forEach((btn) =>
+  btn.addEventListener("click", () => copyPayload(btn.dataset.copy, btn)));
 
 $("teamId").addEventListener("keydown", (e) => { if (e.key === "Enter") loadDigest(); });
 </script>
