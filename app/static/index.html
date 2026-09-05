@@ -232,6 +232,40 @@
 
   .news { color: var(--muted); font-size: 12px; white-space: normal; min-width: 200px; }
 
+  /* Replacement suggestions, revealed per player. Only the few flagged players
+     have any, so they stay collapsed until asked for. */
+  .alt-toggle {
+    height: 20px; padding: 0 7px; margin-left: 8px; vertical-align: middle;
+    background: transparent; border: 1px solid var(--pl-pink); color: var(--pl-pink);
+    font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
+    cursor: pointer; transition: background 0.15s, color 0.15s;
+  }
+  .alt-toggle:hover, tr.open .alt-toggle { background: var(--pl-pink); color: #fff; }
+  .alt-toggle::after { content: " \25B8"; }
+  tr.open .alt-toggle::after { content: " \25BE"; }
+  tr.alt-detail > td { background: #fbf7fc; padding: 0; border-bottom: 1px solid var(--border); }
+  tr.alt-detail[hidden] { display: none; }
+  .alt-inner { padding: 12px 14px 14px 22px; border-left: 3px solid var(--pl-pink); }
+  .alt-head {
+    font-size: 9px; text-transform: uppercase; letter-spacing: 1.2px;
+    color: var(--muted); font-weight: 700; margin-bottom: 8px;
+  }
+  .alt-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .alt-card {
+    background: #fff; border: 1px solid var(--border); padding: 8px 12px;
+    display: flex; align-items: baseline; gap: 10px; font-size: 12px;
+  }
+  .alt-card .an { font-weight: 700; font-size: 13px; }
+  .alt-card .at { color: var(--muted); font-weight: 700; font-size: 10px; letter-spacing: 0.6px; }
+  .alt-card .am { color: var(--muted); }
+  .alt-card .am b { color: var(--text); font-weight: 700; }
+
+  tr.divider td {
+    background: var(--bg); color: var(--muted); font-size: 9px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1.4px; padding: 6px 8px;
+  }
+  .note { color: var(--muted); font-size: 12px; padding: 4px 0 0; }
+
   .alert {
     padding: 11px 14px; margin: 9px 0; font-size: 13px;
     border-left: 4px solid var(--border); background: #fafafb;
@@ -392,12 +426,21 @@ function fdrChips(fixtures) {
 function setStats(d) {
   const h = d.entry_history || {};
   const flagged = d.squad.filter((p) => p.status !== "a").length;
+  const money = (v) => (v == null ? "—" : "£" + (v / 10).toFixed(1) + "m");
+  // event_transfers_cost is the points hit, shown alongside the count.
+  const transfers = h.event_transfers == null
+    ? "—"
+    : h.event_transfers + (h.event_transfers_cost ? ` (-${h.event_transfers_cost})` : "");
   const cells = [
     ["Gameweek", d.gameweek, ""],
     ["GW Points", h.points ?? "—", "green"],
     ["Total", h.total_points ?? "—", ""],
     ["Overall Rank", h.overall_rank ? h.overall_rank.toLocaleString() : "—", "cyan"],
-    ["Squad Value", h.value ? "£" + (h.value / 10).toFixed(1) + "m" : "—", ""],
+    ["Squad Value", money(h.value), ""],
+    ["In the Bank", money(h.bank), ""],
+    ["Transfers", transfers, h.event_transfers_cost ? "pink" : ""],
+    ["Bench Points", h.points_on_bench ?? "—", ""],
+    ["Chip", d.active_chip || "None", d.active_chip ? "cyan" : ""],
     ["Alerts", d.alerts.length, d.alerts.length ? "pink" : ""],
     ["Flagged", flagged, flagged ? "pink" : ""],
   ];
@@ -430,7 +473,10 @@ async function loadDigest() {
       entry_history: d.entry_history, squad: d.squad,
     };
     latest.alerts = {
-      gameweek: d.gameweek, has_previous_snapshot: d.has_previous_snapshot, alerts: d.alerts,
+      gameweek: d.gameweek,
+      has_previous_snapshot: d.has_previous_snapshot,
+      compared_against_gameweek: d.compared_against_gameweek,
+      alerts: d.alerts,
     };
     latest.chips = { active_chip: d.active_chip };
     latest.fixtures = {
@@ -449,14 +495,44 @@ async function loadDigest() {
   }
 }
 
+const COLUMNS = 8;
+
+function alternativesRow(player) {
+  const alts = player.suggested_alternatives;
+  if (!alts || !alts.length) return "";
+  const cards = alts.map((a) => `<div class="alt-card">
+      <span class="an">${esc(a.web_name)}</span>
+      <span class="at">${esc(a.team_short)}</span>
+      <span class="am">£${esc(a.now_cost)}m &middot; form <b>${esc(a.form)}</b>
+        &middot; FDR <b>${a.avg_difficulty ?? "—"}</b></span>
+    </div>`).join("");
+  return `<tr class="alt-detail" data-alts-for="${player.player_id}" hidden>
+    <td colspan="${COLUMNS}"><div class="alt-inner">
+      <div class="alt-head">Replacements for ${esc(player.web_name)} — same position,
+        available, up to £${(player.now_cost + 0.5).toFixed(1)}m</div>
+      <div class="alt-grid">${cards}</div>
+    </div></td></tr>`;
+}
+
 function renderSquad(d) {
   $("squadTitle").textContent = `Squad — Gameweek ${d.gameweek}`;
+  let benchStarted = false;
   const rows = d.squad.map((p) => {
     const flagged = p.status !== "a" || p.news;
-    return `<tr class="${p.is_starting ? "" : "bench"} ${flagged ? "flagged" : ""}">
+    const alts = p.suggested_alternatives || [];
+    // One divider where the bench begins, rather than relying on the dimming alone.
+    let divider = "";
+    if (!p.is_starting && !benchStarted) {
+      benchStarted = true;
+      divider = `<tr class="divider"><td colspan="${COLUMNS}">Bench</td></tr>`;
+    }
+    return divider + `<tr class="${p.is_starting ? "" : "bench"} ${flagged ? "flagged" : ""}"
+        data-player="${p.player_id}">
       <td class="name rail"><span class="status-dot status-${esc(p.status || "a")}"></span>${esc(p.web_name)}
         ${p.is_captain ? '<span class="badge c">C</span>' : ""}
-        ${p.is_vice_captain ? '<span class="badge v">V</span>' : ""}</td>
+        ${p.is_vice_captain ? '<span class="badge v">V</span>' : ""}
+        ${alts.length ? `<button type="button" class="alt-toggle" aria-expanded="false"
+            aria-controls="alts-${p.player_id}">${alts.length} options</button>` : ""}</td>
       <td>${esc(p.team_short)}</td>
       <td>${esc(p.position)}</td>
       <td>£${esc(p.now_cost)}m</td>
@@ -464,7 +540,7 @@ function renderSquad(d) {
       <td class="avg">${p.avg_difficulty ?? "—"}</td>
       <td>${fdrChips(p.fixtures)}</td>
       <td class="news">${esc(p.news) || "—"}</td>
-    </tr>`;
+    </tr>` + alternativesRow(p);
   }).join("");
   $("squadContent").className = "";
   $("squadContent").innerHTML = `<table>
@@ -473,18 +549,37 @@ function renderSquad(d) {
     <tbody>${rows}</tbody></table>`;
 }
 
+// Delegated, so it survives every re-render of the table.
+$("squadContent").addEventListener("click", (e) => {
+  const toggle = e.target.closest(".alt-toggle");
+  if (!toggle) return;
+  const row = toggle.closest("tr");
+  const detail = $("squadContent").querySelector(
+    `[data-alts-for="${row.dataset.player}"]`
+  );
+  if (!detail) return;
+  const open = detail.hidden;
+  detail.hidden = !open;
+  row.classList.toggle("open", open);
+  toggle.setAttribute("aria-expanded", String(open));
+});
+
 function renderAlerts(d) {
   $("alertsTitle").textContent = `Alerts — Gameweek ${d.gameweek}`;
   if (!d.alerts.length) {
     $("alertsContent").className = "empty";
     $("alertsContent").textContent = d.has_previous_snapshot
-      ? "No changes detected since last week's snapshot."
+      ? `No changes detected since the gameweek ${d.compared_against_gameweek} snapshot.`
       : "No snapshot from last week yet — this run saved the baseline to diff against next time.";
     return;
   }
   $("alertsContent").className = "";
+  const note = d.compared_against_gameweek
+    ? `<div class="note">Compared against the gameweek ${d.compared_against_gameweek} snapshot.</div>`
+    : "";
   $("alertsContent").innerHTML = d.alerts.map((a) =>
-    `<div class="alert ${esc(a.severity)}"><strong>${esc(a.web_name)}</strong> — ${esc(a.message)}</div>`).join("");
+    `<div class="alert ${esc(a.severity)}"><strong>${esc(a.web_name)}</strong> — ${esc(a.message)}</div>`).join("")
+    + note;
 }
 
 function runList(title, runs) {
